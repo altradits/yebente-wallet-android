@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-  entities = [PromiseEntity::class, SenderHeadEntity::class, DepositEntity::class, TrustedSenderEntity::class, ForkProofEntity::class],
-  version = 4,
+  entities = [PromiseEntity::class, SenderHeadEntity::class, DepositEntity::class, TrustedSenderEntity::class, ForkProofEntity::class, OutboundHeadEntity::class],
+  version = 5,
   exportSchema = false,
 )
 abstract class WalletDatabase : RoomDatabase() {
@@ -18,6 +18,7 @@ abstract class WalletDatabase : RoomDatabase() {
   abstract fun deposits(): DepositDao
   abstract fun trusted(): TrustedSenderDao
   abstract fun forks(): ForkProofDao
+  abstract fun outboundHeads(): OutboundHeadDao
 
   companion object {
     val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -39,12 +40,18 @@ abstract class WalletDatabase : RoomDatabase() {
       }
     }
 
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS outbound_heads (recipient TEXT NOT NULL PRIMARY KEY, lastSeq INTEGER NOT NULL, lastHash TEXT NOT NULL)")
+      }
+    }
+
     fun build(context: Context): WalletDatabase {
       return Room.databaseBuilder(
         context.applicationContext,
         WalletDatabase::class.java,
         "yebente-wallet.db",
-      ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+      ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
     }
   }
 }

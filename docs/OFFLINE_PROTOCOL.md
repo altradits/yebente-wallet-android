@@ -107,6 +107,8 @@ The receiver accepts a promise only if every rule holds:
 4. The signature verifies against the sender key.
 5. Sequence is exactly last accepted seq plus 1 from that sender (1 for a new
    sender). Gaps are rejected: the sender must deliver the missing promise.
+   The sender keeps one independent chain per recipient, so paying someone
+   else never creates a gap in your chain.
 6. `prevHash` chains to the last accepted promise hash (GENESIS for seq 1).
 7. The sender total and the wallet inbound total stay within caps.
 

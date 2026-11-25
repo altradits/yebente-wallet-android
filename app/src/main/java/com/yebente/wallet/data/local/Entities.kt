@@ -29,6 +29,13 @@ data class SenderHeadEntity(
   val blocked: Boolean = false,
 )
 
+@Entity(tableName = "outbound_heads")
+data class OutboundHeadEntity(
+  @PrimaryKey val recipient: String,
+  val lastSeq: Long,
+  val lastHash: String,
+)
+
 @Entity(tableName = "fork_proofs")
 data class ForkProofEntity(
   @PrimaryKey val id: String,
