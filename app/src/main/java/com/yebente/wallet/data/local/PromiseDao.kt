@@ -104,6 +104,9 @@ interface TrustedSenderDao {
   @Query("SELECT sender FROM trusted_senders WHERE sender = :sender LIMIT 1")
   suspend fun isTrusted(sender: String): String?
 
+  @Query("SELECT * FROM trusted_senders WHERE sender = :sender LIMIT 1")
+  suspend fun bySender(sender: String): TrustedSenderEntity?
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsert(sender: TrustedSenderEntity)
 
