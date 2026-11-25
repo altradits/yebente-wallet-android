@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Obsidian Plum: default Stan Style palette, mirrored from web brandKit. -->
+  <color name="bg_root">#120E16</color>
+  <color name="bg_nav">#16101D</color>
+  <color name="bg_surface">#1D1627</color>
+  <color name="bg_input">#140E1B</color>
+  <color name="bg_tab_active">#2E203C</color>
+  <color name="bg_button_neutral">#231A2D</color>
+  <color name="border_subtle">#382B44</color>
+  <color name="border_modal">#3A2D47</color>
+  <color name="border_interactive">#3C2E49</color>
+  <color name="accent_primary">#763698</color>
+  <color name="accent_primary_hover">#8A41B0</color>
+  <color name="accent_secondary">#946069</color>
+  <color name="accent_secondary_hover">#A96E78</color>
+  <color name="text_primary">#F8F0E7</color>
+  <color name="text_secondary">#D1B9B3</color>
+  <color name="text_muted">#9B97A2</color>
+  <color name="text_disabled">#554653</color>
+  <color name="status_success">#34D399</color>
+  <color name="status_error">#F87171</color>
+</resources>
