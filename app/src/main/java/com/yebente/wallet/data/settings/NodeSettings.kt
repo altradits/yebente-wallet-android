@@ -141,6 +141,15 @@ class NodeSettings(private val context: Context) : NodeCredentials {
     }
   }
 
+  suspend fun resetChainState() {
+    context.nodeStore.edit { prefs ->
+      prefs.remove(outboundSeqKey)
+      prefs.remove(outboundHashKey)
+      prefs.remove(anchorKey)
+      prefs.remove(addressIndexKey)
+    }
+  }
+
   companion object {
     private const val SECRETS_NAME = "yebente_encrypted_prefs"
     private const val KEY_NODE_KEY = "node_key"

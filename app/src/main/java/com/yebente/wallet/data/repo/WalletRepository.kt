@@ -48,8 +48,8 @@ class WalletRepository(
   private val policy: OfflinePolicy = OfflinePolicy(),
 ) : SettlementStore, DepositPoller {
 
-  private val identity: WalletIdentity by lazy { WalletIdentity.fromSeed(seedStore.seedBytes()) }
-  private val addresses: BitcoinAddresses by lazy { BitcoinAddresses(seedStore.getOrCreateSeed()) }
+  private fun identity(): WalletIdentity = WalletIdentity.fromSeed(seedStore.seedBytes())
+  private fun addresses(): BitcoinAddresses = BitcoinAddresses(seedStore.getOrCreateSeed())
   private val random = SecureRandom()
 
   fun balances(): Flow<WalletBalances> = combine(
@@ -67,11 +67,33 @@ class WalletRepository(
 
   fun deposits() = db.deposits().all()
 
-  fun identityHex(): String = identity.publicHex
+  fun identityHex(): String = identity().publicHex
+
+  fun seedWords(): List<String>? = seedStore.words()
+
+  suspend fun restoreFromMnemonic(text: String): Result<Unit> {
+    val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) {
+      return Result.failure(IllegalArgumentException("Enter the recovery phrase."))
+    }
+    try {
+      seedStore.setMnemonic(words)
+    } catch (t: Exception) {
+      return Result.failure(IllegalArgumentException("Invalid recovery phrase."))
+    }
+    db.promises().clear()
+    db.senderHeads().clear()
+    db.deposits().clear()
+    db.trusted().clear()
+    db.forks().clear()
+    // Rebase note: also clear outboundHeads once per-recipient chains land.
+    settings.resetChainState()
+    return Result.success(Unit)
+  }
 
   suspend fun myHandshake(): ReceiveHandshake {
     val index = settings.nextAddressIndex()
-    val address = addresses.receiveAddress(index)
+    val address = addresses().receiveAddress(index)
     val lightning = settings.current().lightningAddress
     return ReceiveHandshake(
       recipient = identityHex(),
@@ -109,7 +131,7 @@ class WalletRepository(
       settleAddress = handshake.address,
       memo = memo.trim().take(120),
     )
-    val signed = identity.signPromise(unsigned)
+    val signed = identity().signPromise(unsigned)
     return try {
       db.promises().insert(
         PromiseEntity(
