@@ -36,6 +36,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import com.yebente.wallet.domain.protocol.PromiseCodec
 import com.yebente.wallet.ui.components.NeutralButton
 import com.yebente.wallet.ui.components.Note
 import com.yebente.wallet.ui.components.StanHeader
@@ -72,7 +73,9 @@ fun ScannerScreen(purpose: String, onCode: (String) -> Unit, onBack: () -> Unit)
     if (finished) return
     val clean = raw.trim()
     if (clean.isEmpty()) return
-    if (purpose == ScanPurposes.PROMISE && clean.startsWith("YB1:")) {
+    val framed = purpose == ScanPurposes.PROMISE &&
+      (clean.startsWith(PromiseCodec.PROMISE_PREFIX + ":") || clean.startsWith(PromiseCodec.FORK_PREFIX + ":"))
+    if (framed) {
       val numbers = clean.split(":")
       if (numbers.size < 4) return
       val total = numbers[1].toIntOrNull() ?: return
