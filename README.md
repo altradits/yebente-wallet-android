@@ -12,6 +12,8 @@ user's own node credentials through for every settlement call.
 
 v0.1 scaffold: full offline promise protocol, QR/NFC/BLE transports, deposit
 anchoring, Lightning settlement engine, rebalance worker, Stan Style UI.
+Spendable is anchor plus trusted-sender inbound; fork proofs block
+double-spending senders.
 
 ## Build
 

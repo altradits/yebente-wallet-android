@@ -51,8 +51,9 @@ The signed bytes are the UTF-8 string of pipe-joined fields, excluding `sig`:
 YB1|v|id|sender|recipient|sats|seq|createdAt|expiresAt|prevHash|settleAddress|memo
 ```
 
-Keys and hashes lowercase. The signer hashes this once with SHA-256 and signs
-with the secp256k1 identity key. Any edit to any field breaks the signature.
+Keys and hashes lowercase. The signer double-hashes this with SHA-256
+(SHA-256 of the SHA-256 digest, matching the implementation) and signs the
+digest with the secp256k1 identity key. Any edit to any field breaks it.
 
 ### Receive handshake (YBH1)
 
