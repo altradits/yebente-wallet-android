@@ -191,8 +191,9 @@ class OfflineE2ETest {
         val verdict = PromiseValidator.validateInbound(qrGot, null, 0, policy, now)
         assertEquals(ValidationResult.Valid, verdict)
         val receiverSide = WalletBalances(anchorSats = 20_000, inboundAcceptedSats = 5000, outboundPendingSats = 0)
-        assertEquals(25_000, receiverSide.spendableSats)
-        assertTrue(receiverSide.canSpend(25_000))
+        assertEquals(20_000, receiverSide.spendableSats)
+        assertEquals(5000, receiverSide.pendingInboundSats)
+        assertTrue(receiverSide.canSpend(20_000))
         val senderSide = WalletBalances(anchorSats = 20_000, inboundAcceptedSats = 0, outboundPendingSats = 5000)
         assertEquals(15_000, senderSide.spendableSats)
       }
