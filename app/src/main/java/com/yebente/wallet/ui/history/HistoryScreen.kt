@@ -1,16 +1,21 @@
 package com.yebente.wallet.ui.history
 
+import android.graphics.Bitmap
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -18,9 +23,15 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,6 +39,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yebente.wallet.data.local.PromiseEntity
 import com.yebente.wallet.di.AppContainer
+import com.yebente.wallet.domain.protocol.PromiseCodec
+import com.yebente.wallet.offline.qr.QrCodes
 import com.yebente.wallet.ui.components.NeutralButton
 import com.yebente.wallet.ui.components.Note
 import com.yebente.wallet.ui.components.StanHeader
@@ -45,12 +58,34 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+data class ForkGossipView(val sender: String, val seq: Long, val frames: List<String>)
+
 class HistoryViewModel(private val container: AppContainer) : ViewModel() {
   val promises: StateFlow<List<PromiseEntity>> = container.repository.recentPromises(200)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
   val blockedSenders: StateFlow<List<String>> = container.repository.blockedSenders()
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  private val _gossips = MutableStateFlow<List<ForkGossipView>>(emptyList())
+  val forkGossips: StateFlow<List<ForkGossipView>> = _gossips
+
+  init {
+    refreshGossip()
+  }
+
+  fun refreshGossip() {
+    viewModelScope.launch {
+      val list = withContext(Dispatchers.IO) { container.repository.exportableForkGossip() }
+      _gossips.value = list.map { gossip ->
+        ForkGossipView(
+          sender = gossip.first.sender.lowercase(),
+          seq = gossip.first.seq,
+          frames = PromiseCodec.encodeForkGossip(gossip),
+        )
+      }
+    }
+  }
 
   private val _settleStatus = MutableStateFlow("")
   val settleStatus: StateFlow<String> = _settleStatus
@@ -127,6 +162,57 @@ fun HistoryScreen(
       Spacer(modifier = Modifier.height(8.dp))
     }
 
+    val gossips by vm.forkGossips.collectAsState()
+    val gossipPages = remember { mutableStateMapOf<String, Int>() }
+    gossips.forEach { gossip ->
+      val key = "${gossip.sender}:${gossip.seq}"
+      val page = (gossipPages[key] ?: 0).coerceIn(0, (gossip.frames.size - 1).coerceAtLeast(0))
+      Text(
+        text = "Proof ${gossip.sender.take(12)} seq ${gossip.seq}",
+        fontFamily = Mono,
+        fontSize = 11.sp,
+        color = ObsidianPlum.TextSecondary,
+      )
+      val bitmap: Bitmap? = try {
+        QrCodes.toBitmap(gossip.frames[page])
+      } catch (_: Exception) {
+        null
+      }
+      if (bitmap != null) {
+        Image(
+          bitmap = bitmap.asImageBitmap(),
+          contentDescription = "Double-spend proof",
+          modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .padding(12.dp),
+        )
+      }
+      if (gossip.frames.size > 1) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          NeutralButtonInline(label = "Prev", onClick = {
+            gossipPages[key] = (page - 1).coerceAtLeast(0)
+          })
+          Text(
+            text = "Part ${page + 1} of ${gossip.frames.size}",
+            fontFamily = Mono,
+            fontSize = 12.sp,
+            color = ObsidianPlum.TextMuted,
+          )
+          NeutralButtonInline(label = "Next", onClick = {
+            gossipPages[key] = (page + 1).coerceAtMost(gossip.frames.size - 1)
+          })
+        }
+      }
+      Spacer(modifier = Modifier.height(8.dp))
+    }
+
     if (vm.selectedId != null) {
       Text(
         text = "Settle this payment over Lightning now. The recipient invoice can be scanned.",
@@ -157,7 +243,10 @@ fun HistoryScreen(
       HorizontalDivider(color = ObsidianPlum.BorderSubtle)
     }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+    LazyColumn(
+      modifier = Modifier.weight(1f),
+      verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
       items(promises, key = { it.id }) { row ->
         HistoryRow(
           row = row,
@@ -181,11 +270,26 @@ fun HistoryScreen(
 }
 
 @Composable
+private fun NeutralButtonInline(label: String, onClick: () -> Unit) {
+  androidx.compose.material3.Button(
+    onClick = onClick,
+    shape = RoundedCornerShape(12.dp),
+    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+      containerColor = ObsidianPlum.BgButtonNeutral,
+      contentColor = ObsidianPlum.TextPrimary,
+    ),
+  ) {
+    Text(text = label, fontFamily = Sans, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+  }
+}
+
+@Composable
 private fun HistoryRow(row: PromiseEntity, onClick: () -> Unit) {
   val incoming = row.direction == "INBOUND"
   val title = when {
     incoming && row.state == "ACCEPTED" -> "Received"
     incoming && row.state == "RECEIPT_CONFIRMED" -> "Received Confirmed"
+    incoming && row.state == "FORKED" -> "Double-spend Proof"
     incoming -> "Received Expired"
     row.state == "QUEUED" -> "Send Queued"
     row.state == "SETTLING" -> "Send Settling"
@@ -193,7 +297,7 @@ private fun HistoryRow(row: PromiseEntity, onClick: () -> Unit) {
     row.state == "FAILED" -> "Send Failed"
     else -> "Send Expired"
   }
-  val amount = if (incoming) row.sats else -row.sats
+  val amount = if (row.state == "FORKED") 0L else if (incoming) row.sats else -row.sats
   Row(
     modifier = Modifier
       .fillMaxWidth()
@@ -221,7 +325,7 @@ private fun HistoryRow(row: PromiseEntity, onClick: () -> Unit) {
       fontFamily = Mono,
       fontSize = 14.sp,
       fontWeight = FontWeight.Bold,
-      color = if (incoming) ObsidianPlum.StatusSuccess else ObsidianPlum.TextPrimary,
+      color = if (incoming && row.state != "FORKED") ObsidianPlum.StatusSuccess else ObsidianPlum.TextPrimary,
     )
   }
 }

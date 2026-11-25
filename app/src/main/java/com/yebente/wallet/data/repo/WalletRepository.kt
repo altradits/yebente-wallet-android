@@ -13,6 +13,7 @@ import com.yebente.wallet.data.local.WalletDatabase
 import com.yebente.wallet.data.remote.CreateInvoiceRequest
 import com.yebente.wallet.data.remote.YebenteApi
 import com.yebente.wallet.data.settings.NodeSettings
+import com.yebente.wallet.domain.model.ForkGossip
 import com.yebente.wallet.domain.model.OfflinePolicy
 import com.yebente.wallet.domain.model.OfflinePromise
 import com.yebente.wallet.domain.model.PromiseDirection
@@ -135,6 +136,61 @@ class WalletRepository(
 
   fun blockedSenders(): Flow<List<String>> = db.senderHeads().blockedSenders()
 
+  suspend fun exportableForkGossip(): List<ForkGossip> {
+    return db.forks().allOnce().mapNotNull { proof ->
+      val a = db.promises().byId(proof.firstId) ?: return@mapNotNull null
+      val b = db.promises().byId(proof.secondId) ?: return@mapNotNull null
+      try {
+        ForkGossip(
+          first = PromiseCodec.json.decodeFromString(OfflinePromise.serializer(), a.json),
+          second = PromiseCodec.json.decodeFromString(OfflinePromise.serializer(), b.json),
+        )
+      } catch (_: Exception) {
+        null
+      }
+    }
+  }
+
+  suspend fun importForkGossip(gossip: ForkGossip): Boolean {
+    if (!WalletIdentity.verifyPromise(gossip.first) || !WalletIdentity.verifyPromise(gossip.second)) {
+      return false
+    }
+    val fork = ForkDetector.detect(gossip.first, gossip.second) ?: return false
+    val now = System.currentTimeMillis()
+    for (branch in listOf(gossip.first, gossip.second)) {
+      try {
+        db.promises().insert(
+          PromiseEntity(
+            id = branch.id,
+            direction = PromiseDirection.INBOUND.name,
+            json = PromiseCodec.json.encodeToString(OfflinePromise.serializer(), branch),
+            state = PromiseState.FORKED.name,
+            sats = branch.sats,
+            counterparty = branch.sender,
+            seq = branch.seq,
+            createdAt = branch.createdAt,
+            updatedAt = now,
+          ),
+        )
+      } catch (_: SQLiteConstraintException) {
+      }
+    }
+    db.forks().insert(
+      ForkProofEntity(
+        id = "${fork.sender}:${fork.seq}",
+        sender = fork.sender,
+        seq = fork.seq,
+        firstId = fork.firstId,
+        firstHash = fork.firstHash,
+        secondId = fork.secondId,
+        secondHash = fork.secondHash,
+        detectedAt = now,
+      ),
+    )
+    blockSender(fork.sender, gossip.first.seq, fork.firstHash)
+    return true
+  }
+
   suspend fun acceptInbound(promise: OfflinePromise): ValidationResult {
     val now = System.currentTimeMillis()
     val headRow = db.senderHeads().bySender(promise.sender.lowercase())
@@ -227,6 +283,22 @@ class WalletRepository(
     }
     val fork = ForkDetector.detect(existing, promise) ?: return null
     if (!WalletIdentity.verifyPromise(promise)) return null
+    try {
+      db.promises().insert(
+        PromiseEntity(
+          id = promise.id,
+          direction = PromiseDirection.INBOUND.name,
+          json = PromiseCodec.json.encodeToString(OfflinePromise.serializer(), promise),
+          state = PromiseState.FORKED.name,
+          sats = promise.sats,
+          counterparty = promise.sender,
+          seq = promise.seq,
+          createdAt = promise.createdAt,
+          updatedAt = now,
+        ),
+      )
+    } catch (_: SQLiteConstraintException) {
+    }
     db.forks().insert(
       ForkProofEntity(
         id = "${fork.sender}:${fork.seq}",
@@ -239,16 +311,18 @@ class WalletRepository(
         detectedAt = now,
       ),
     )
-    val headRow = db.senderHeads().bySender(fork.sender)
+    blockSender(fork.sender, existing.seq, fork.firstHash)
+    return ValidationResult.Invalid("FORK_DETECTED", "Sender double-spent seq ${fork.seq} and is now blocked.")
+  }
+
+  private suspend fun blockSender(sender: String, seq: Long, hash: String) {
+    val headRow = db.senderHeads().bySender(sender)
     if (headRow != null) {
       db.senderHeads().upsert(headRow.copy(blocked = true))
     } else {
-      db.senderHeads().upsert(
-        SenderHeadEntity(fork.sender, existing.seq, fork.firstHash, 0L, blocked = true),
-      )
+      db.senderHeads().upsert(SenderHeadEntity(sender, seq, hash, 0L, blocked = true))
     }
-    db.trusted().delete(fork.sender)
-    return ValidationResult.Invalid("FORK_DETECTED", "Sender double-spent seq ${fork.seq} and is now blocked.")
+    db.trusted().delete(sender)
   }
 
   suspend fun storeRecipientInvoice(promiseId: String, invoice: String) {

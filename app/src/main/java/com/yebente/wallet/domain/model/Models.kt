@@ -28,6 +28,7 @@ enum class PromiseState {
   EXPIRED,
   ACCEPTED,
   RECEIPT_CONFIRMED,
+  FORKED,
 }
 
 @Serializable
@@ -64,6 +65,13 @@ data class SettlementReceipt(
   val preimage: String = "",
   val sats: Long,
   val settledAt: Long,
+)
+
+@Serializable
+data class ForkGossip(
+  val v: Int = 1,
+  val first: OfflinePromise,
+  val second: OfflinePromise,
 )
 
 data class WalletBalances(

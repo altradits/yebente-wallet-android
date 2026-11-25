@@ -1,5 +1,6 @@
 package com.yebente.wallet.domain.protocol
 
+import com.yebente.wallet.domain.model.ForkGossip
 import com.yebente.wallet.domain.model.OfflinePromise
 import com.yebente.wallet.domain.model.ReceiveHandshake
 import com.yebente.wallet.domain.model.SettlementReceipt
@@ -14,6 +15,7 @@ object PromiseCodec {
   const val PROMISE_PREFIX = "YB1"
   const val HANDSHAKE_PREFIX = "YBH1"
   const val RECEIPT_PREFIX = "YBR1"
+  const val FORK_PREFIX = "YBF1"
   const val GENESIS_HASH = "GENESIS"
 
   val json: Json = Json {
@@ -88,6 +90,17 @@ object PromiseCodec {
     require(clean.startsWith(prefix)) { "Not a YeBente receipt code" }
     val raw = String(b64Decoder.decode(clean.removePrefix(prefix)), Charsets.UTF_8)
     return json.decodeFromString(SettlementReceipt.serializer(), raw)
+  }
+
+  fun encodeForkGossip(gossip: ForkGossip, maxChunkChars: Int = 1200): List<String> {
+    val payload = b64Encoder.encodeToString(json.encodeToString(ForkGossip.serializer(), gossip).toByteArray(Charsets.UTF_8))
+    return frame(FORK_PREFIX, payload, maxChunkChars)
+  }
+
+  fun decodeForkGossip(frames: List<String>): ForkGossip {
+    val payload = unframe(FORK_PREFIX, frames)
+    val raw = String(b64Decoder.decode(payload), Charsets.UTF_8)
+    return json.decodeFromString(ForkGossip.serializer(), raw)
   }
 
   fun frame(prefix: String, payload: String, maxChunkChars: Int): List<String> {

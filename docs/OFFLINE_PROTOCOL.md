@@ -79,6 +79,21 @@ YBR1:<base64url of SettlementReceipt JSON>
 
 A preimage is cryptographic proof that the Lightning payment completed.
 
+### Fork gossip (YBF1)
+
+Double-spend proofs travel phone to phone so receivers who never met the
+sender still learn to block them:
+
+```
+YBF1:<total>:<index>:<payload-chunk>
+```
+
+Joining all chunks yields the base64url of a `ForkGossip` JSON object
+carrying both signed promises. The importer verifies both signatures and
+runs fork detection before storing the proof and blocking the sender, so
+fake gossip cannot frame an honest sender. History exports one code per
+proof; the receive scanner imports them like payments.
+
 ## Acceptance rules
 
 The receiver accepts a promise only if every rule holds:
