@@ -32,8 +32,8 @@ gradle wrapper --gradle-version 8.7
 ## How it works
 
 - No internet: phones exchange signed offline promises. The receiver verifies
-  the signature, sequence chain and caps, then credits spendable balance
-  immediately, so spending continues offline.
+  the signature, sequence chain and caps, then holds the amount as pending;
+  only settled anchor and trusted-sender inbound count as spendable.
 - Reconnect: a WorkManager job fires on network restore. It polls verified
   deposits to anchor the balance, then settles each queued outbound promise
   over Lightning through the user's own node via the Yebente gateway.

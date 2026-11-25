@@ -8,15 +8,34 @@ import org.junit.Test
 
 class WalletBalancesTest {
   @Test
-  fun `spendable adds anchor and inbound minus outbound`() {
-    val balances = WalletBalances(anchorSats = 10_000, inboundAcceptedSats = 3_000, outboundPendingSats = 4_000)
+  fun `spendable adds anchor and trusted inbound minus outbound`() {
+    val balances = WalletBalances(
+      anchorSats = 10_000,
+      inboundAcceptedSats = 3_000,
+      outboundPendingSats = 4_000,
+      trustedInboundSats = 3_000,
+    )
     assertEquals(9_000, balances.spendableSats)
   }
 
   @Test
-  fun `offline receive is spendable before settlement`() {
+  fun `untrusted offline receive is pending not spendable`() {
     val balances = WalletBalances(anchorSats = 0, inboundAcceptedSats = 2_500, outboundPendingSats = 0)
+    assertEquals(0, balances.spendableSats)
+    assertEquals(2_500, balances.pendingInboundSats)
+    assertFalse(balances.canSpend(2_500))
+  }
+
+  @Test
+  fun `trusted inbound is spendable before settlement`() {
+    val balances = WalletBalances(
+      anchorSats = 0,
+      inboundAcceptedSats = 2_500,
+      outboundPendingSats = 0,
+      trustedInboundSats = 2_500,
+    )
     assertEquals(2_500, balances.spendableSats)
+    assertEquals(0, balances.pendingInboundSats)
     assertTrue(balances.canSpend(2_500))
   }
 

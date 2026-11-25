@@ -70,9 +70,13 @@ data class WalletBalances(
   val anchorSats: Long,
   val inboundAcceptedSats: Long,
   val outboundPendingSats: Long,
+  val trustedInboundSats: Long = 0L,
 ) {
   val spendableSats: Long
-    get() = maxOf(0L, anchorSats + inboundAcceptedSats - outboundPendingSats)
+    get() = maxOf(0L, anchorSats + trustedInboundSats - outboundPendingSats)
+
+  val pendingInboundSats: Long
+    get() = maxOf(0L, inboundAcceptedSats - trustedInboundSats)
 
   fun canSpend(amountSats: Long): Boolean = amountSats > 0 && amountSats <= spendableSats
 }

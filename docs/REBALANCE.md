@@ -6,13 +6,16 @@ offline payments settle over Lightning, and proofs flow back as receipts.
 ## Balance model
 
 ```
-spendable = anchor + inboundAccepted - outboundPending, floored at zero
+spendable = anchor + trustedInbound - outboundPending, floored at zero
+pendingInbound = inboundAccepted - trustedInbound, floored at zero
 ```
 
 - anchor: sats verified on the user's own Lightning node through paid deposit
   invoices. The only number that represents settled mainnet funds.
-- inboundAccepted: offline promises accepted from other phones. Spendable at
-  once so the user keeps spending with no internet. Trusted, not settled.
+- inboundAccepted: offline promises accepted from other phones. Pending until
+  a receipt confirms settlement, unless the sender is on the trusted list.
+- trustedInbound: the accepted inbound portion sent by trusted senders. The
+  only inbound slice that counts as spendable before settlement.
 - outboundPending: offline promises this phone created and has not settled yet.
 
 Failed, expired, or settled outbound promises leave the pending sum, so the

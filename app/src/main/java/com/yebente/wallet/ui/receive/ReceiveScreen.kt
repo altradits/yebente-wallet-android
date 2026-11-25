@@ -103,7 +103,7 @@ class ReceiveViewModel(private val container: AppContainer) : ViewModel() {
         val verdict = withContext(Dispatchers.IO) { container.repository.acceptInbound(promise) }
         _state.value = when (verdict) {
           is ValidationResult.Valid -> _state.value.copy(
-            status = "Received ${promise.sats} sats. Spendable now, settles on reconnect.",
+            status = "Received ${promise.sats} sats. Pending until it settles or the sender is trusted.",
             error = "",
           )
           is ValidationResult.Invalid -> _state.value.copy(error = verdict.reason, status = "")
@@ -273,7 +273,7 @@ fun ReceiveScreen(
     })
 
     Text(
-      text = "Accepted payments are spendable at once and settle on reconnect.",
+      text = "Accepted payments stay pending until they settle, unless the sender is trusted.",
       fontFamily = Mono,
       fontSize = 11.sp,
       color = ObsidianPlum.TextMuted,
