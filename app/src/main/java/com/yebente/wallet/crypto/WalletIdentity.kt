@@ -6,8 +6,11 @@ import com.yebente.wallet.util.hexToBytes
 import com.yebente.wallet.util.toHex
 import org.bitcoinj.core.ECKey
 import org.bitcoinj.core.Sha256Hash
+import java.io.ByteArrayOutputStream
 import java.math.BigInteger
 import java.security.MessageDigest
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 class WalletIdentity private constructor(val key: ECKey) {
   val publicHex: String = key.pubKey.toHex()
@@ -25,6 +28,7 @@ class WalletIdentity private constructor(val key: ECKey) {
 
   companion object {
     private const val IDENTITY_TAG = "yebente-identity-v1"
+    private const val IDENTITY_SALT = "yebente-identity-hkdf-v1"
 
     fun generate(): WalletIdentity = WalletIdentity(ECKey())
 
@@ -34,11 +38,36 @@ class WalletIdentity private constructor(val key: ECKey) {
     }
 
     fun fromSeed(seed: ByteArray): WalletIdentity {
-      val digest = MessageDigest.getInstance("SHA-256")
-      digest.update(seed)
-      digest.update(IDENTITY_TAG.toByteArray(Charsets.UTF_8))
-      val priv = BigInteger(1, digest.digest())
-      return WalletIdentity(ECKey.fromPrivate(priv))
+      var counter = 0
+      while (true) {
+        val info = "$IDENTITY_TAG/$counter".toByteArray(Charsets.UTF_8)
+        val okm = hkdfSha256(seed, IDENTITY_SALT.toByteArray(Charsets.UTF_8), info, 32)
+        try {
+          return WalletIdentity(ECKey.fromPrivate(BigInteger(1, okm)))
+        } catch (_: Exception) {
+          counter++
+        }
+      }
+    }
+
+    private fun hkdfSha256(ikm: ByteArray, salt: ByteArray, info: ByteArray, length: Int): ByteArray {
+      val extract = Mac.getInstance("HmacSHA256")
+      extract.init(SecretKeySpec(salt, "HmacSHA256"))
+      val prk = extract.doFinal(ikm)
+      val out = ByteArrayOutputStream()
+      var previous = ByteArray(0)
+      var counter = 1
+      while (out.size() < length) {
+        val expand = Mac.getInstance("HmacSHA256")
+        expand.init(SecretKeySpec(prk, "HmacSHA256"))
+        expand.update(previous)
+        expand.update(info)
+        expand.update(counter.toByte())
+        previous = expand.doFinal()
+        out.write(previous)
+        counter++
+      }
+      return out.toByteArray().copyOf(length)
     }
 
     fun verifyPromise(promise: OfflinePromise): Boolean {

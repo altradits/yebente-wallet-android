@@ -54,6 +54,8 @@ YB1|v|id|sender|recipient|sats|seq|createdAt|expiresAt|prevHash|settleAddress|me
 Keys and hashes lowercase. The signer double-hashes this with SHA-256
 (SHA-256 of the SHA-256 digest, matching the implementation) and signs the
 digest with the secp256k1 identity key. Any edit to any field breaks it.
+The identity key derives from the wallet seed via HKDF-SHA256, so wiping
+and restoring from seed reproduces the same signing key.
 
 ### Receive handshake (YBH1)
 
