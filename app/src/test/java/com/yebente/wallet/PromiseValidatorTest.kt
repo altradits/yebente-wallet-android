@@ -108,6 +108,14 @@ class PromiseValidatorTest {
   }
 
   @Test
+  fun `blocked sender is rejected`() {
+    val signed = sender.signPromise(unsigned(2, 1000, "aa".repeat(32)))
+    val head = SenderHead(sender.publicHex, 1, "aa".repeat(32), 1000, blocked = true)
+    val result = PromiseValidator.validateInbound(signed, head, 1000, policy, now)
+    assertTrue(result is ValidationResult.Invalid && result.code == "BLOCKED")
+  }
+
+  @Test
   fun `sender cap is enforced`() {
     val first = sender.signPromise(unsigned(1, 1000, PromiseCodec.GENESIS_HASH))
     val head = SenderHead(sender.publicHex, 1, PromiseCodec.hashHexOf(first), 199_500)

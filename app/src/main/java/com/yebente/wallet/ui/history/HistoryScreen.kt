@@ -49,6 +49,9 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
   val promises: StateFlow<List<PromiseEntity>> = container.repository.recentPromises(200)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+  val blockedSenders: StateFlow<List<String>> = container.repository.blockedSenders()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
   private val _settleStatus = MutableStateFlow("")
   val settleStatus: StateFlow<String> = _settleStatus
   private val _settleError = MutableStateFlow("")
@@ -114,9 +117,15 @@ fun HistoryScreen(
   val status by vm.settleStatus.collectAsState()
   val error by vm.settleError.collectAsState()
   val busy by vm.busy.collectAsState()
+  val blocked by vm.blockedSenders.collectAsState()
 
   Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
     StanHeader(title = "History", onBack = onBack)
+
+    if (blocked.isNotEmpty()) {
+      Note(text = "${blocked.size} sender(s) blocked for double-spending.", error = true)
+      Spacer(modifier = Modifier.height(8.dp))
+    }
 
     if (vm.selectedId != null) {
       Text(

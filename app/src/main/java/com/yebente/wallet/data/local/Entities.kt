@@ -26,6 +26,19 @@ data class SenderHeadEntity(
   val lastSeq: Long,
   val lastHash: String,
   val outstandingSats: Long,
+  val blocked: Boolean = false,
+)
+
+@Entity(tableName = "fork_proofs")
+data class ForkProofEntity(
+  @PrimaryKey val id: String,
+  val sender: String,
+  val seq: Long,
+  val firstId: String,
+  val firstHash: String,
+  val secondId: String,
+  val secondHash: String,
+  val detectedAt: Long,
 )
 
 @Entity(tableName = "trusted_senders")

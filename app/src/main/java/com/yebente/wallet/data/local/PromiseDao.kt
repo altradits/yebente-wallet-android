@@ -59,6 +59,9 @@ interface PromiseDao {
   @Query("UPDATE promises SET state = 'EXPIRED', updatedAt = :now WHERE state IN ('QUEUED','ACCEPTED') AND id IN (:ids)")
   suspend fun markExpired(ids: List<String>, now: Long)
 
+  @Query("SELECT * FROM promises WHERE direction = 'INBOUND' AND lower(counterparty) = :sender AND seq = :seq LIMIT 1")
+  suspend fun inboundBySenderSeq(sender: String, seq: Long): PromiseEntity?
+
   @Query("SELECT * FROM promises WHERE direction = 'OUTBOUND' AND state = 'SETTLED' AND settleRef != ''")
   suspend fun settledWithReceipts(): List<PromiseEntity>
 
@@ -71,10 +74,25 @@ interface SenderHeadDao {
   @Query("SELECT * FROM sender_heads WHERE sender = :sender LIMIT 1")
   suspend fun bySender(sender: String): SenderHeadEntity?
 
+  @Query("SELECT sender FROM sender_heads WHERE blocked = 1")
+  fun blockedSenders(): Flow<List<String>>
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsert(head: SenderHeadEntity)
 
   @Query("DELETE FROM sender_heads")
+  suspend fun clear()
+}
+
+@Dao
+interface ForkProofDao {
+  @Query("SELECT * FROM fork_proofs ORDER BY detectedAt DESC")
+  fun all(): Flow<List<ForkProofEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.IGNORE)
+  suspend fun insert(proof: ForkProofEntity)
+
+  @Query("DELETE FROM fork_proofs")
   suspend fun clear()
 }
 

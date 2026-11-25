@@ -94,4 +94,5 @@ data class SenderHead(
   val lastSeq: Long,
   val lastHash: String,
   val outstandingSats: Long,
+  val blocked: Boolean = false,
 )
