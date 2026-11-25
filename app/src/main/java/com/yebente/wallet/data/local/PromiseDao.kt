@@ -32,6 +32,12 @@ interface PromiseDao {
   @Query("SELECT COALESCE(SUM(sats),0) FROM promises WHERE direction = 'INBOUND' AND state = 'ACCEPTED'")
   suspend fun inboundAcceptedSumOnce(): Long
 
+  @Query("SELECT COALESCE(SUM(p.sats),0) FROM promises p WHERE p.direction = 'INBOUND' AND p.state = 'ACCEPTED' AND lower(p.counterparty) IN (SELECT sender FROM trusted_senders)")
+  fun trustedInboundSum(): Flow<Long>
+
+  @Query("SELECT COALESCE(SUM(p.sats),0) FROM promises p WHERE p.direction = 'INBOUND' AND p.state = 'ACCEPTED' AND lower(p.counterparty) IN (SELECT sender FROM trusted_senders)")
+  suspend fun trustedInboundSumOnce(): Long
+
   @Query("SELECT COALESCE(SUM(sats),0) FROM promises WHERE direction = 'OUTBOUND' AND state IN ('QUEUED','SETTLING')")
   fun outboundPendingSum(): Flow<Long>
 
@@ -69,6 +75,24 @@ interface SenderHeadDao {
   suspend fun upsert(head: SenderHeadEntity)
 
   @Query("DELETE FROM sender_heads")
+  suspend fun clear()
+}
+
+@Dao
+interface TrustedSenderDao {
+  @Query("SELECT * FROM trusted_senders ORDER BY addedAt DESC")
+  fun all(): Flow<List<TrustedSenderEntity>>
+
+  @Query("SELECT sender FROM trusted_senders WHERE sender = :sender LIMIT 1")
+  suspend fun isTrusted(sender: String): String?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsert(sender: TrustedSenderEntity)
+
+  @Query("DELETE FROM trusted_senders WHERE sender = :sender")
+  suspend fun delete(sender: String)
+
+  @Query("DELETE FROM trusted_senders")
   suspend fun clear()
 }
 

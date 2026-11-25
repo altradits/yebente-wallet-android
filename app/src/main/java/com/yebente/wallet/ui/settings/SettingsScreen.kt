@@ -46,6 +46,9 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
   val identity: String by lazy { container.repository.identityHex() }
 
+  val trustedSenders = container.repository.trustedSenders()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
   private val _status = mutableStateOf("")
   val status: String by _status
   private val _error = mutableStateOf("")
@@ -63,6 +66,27 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
       } catch (t: Exception) {
         _error.value = t.message ?: "Could not save settings."
       }
+    }
+  }
+
+  fun trust(sender: String, label: String) {
+    viewModelScope.launch {
+      val result = withContext(Dispatchers.IO) { container.repository.trustSender(sender, label) }
+      result.fold(
+        onSuccess = {
+          _status.value = "Sender trusted. Their inbound now counts as spendable."
+          _error.value = ""
+        },
+        onFailure = { t -> _error.value = t.message ?: "Could not trust sender." },
+      )
+    }
+  }
+
+  fun untrust(sender: String) {
+    viewModelScope.launch {
+      withContext(Dispatchers.IO) { container.repository.untrustSender(sender) }
+      _status.value = "Sender removed from trusted list."
+      _error.value = ""
     }
   }
 
@@ -141,6 +165,36 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onWiped: () -> Uni
     )
     Note(text = vm.status)
     Note(text = vm.error, error = true)
+
+    Text(text = "Trusted senders", fontFamily = Sans, fontSize = 13.sp, color = ObsidianPlum.TextMuted)
+    Text(
+      text = "Inbound from trusted senders counts as spendable before settlement. Trust only people you know.",
+      fontFamily = Mono,
+      fontSize = 11.sp,
+      color = ObsidianPlum.TextMuted,
+    )
+    val trusted by vm.trustedSenders.collectAsState()
+    var trustKey by mutableStateOf("")
+    var trustLabel by mutableStateOf("")
+    SettingsField(value = trustKey, label = "Sender wallet key", onChange = { trustKey = it })
+    SettingsField(value = trustLabel, label = "Label (optional)", onChange = { trustLabel = it })
+    YebenteButton(
+      label = "Trust Sender",
+      onClick = {
+        vm.trust(trustKey, trustLabel)
+        trustKey = ""
+        trustLabel = ""
+      },
+    )
+    trusted.forEach { row ->
+      Text(
+        text = (row.label.ifBlank { "Sender" }) + " " + row.sender.take(24),
+        fontFamily = Mono,
+        fontSize = 11.sp,
+        color = ObsidianPlum.TextSecondary,
+      )
+      NeutralButton(label = "Remove", onClick = { vm.untrust(row.sender) })
+    }
 
     Text(text = "Wallet identity", fontFamily = Sans, fontSize = 13.sp, color = ObsidianPlum.TextMuted)
     Text(
