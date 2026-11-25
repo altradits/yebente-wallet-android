@@ -7,6 +7,7 @@ import com.yebente.wallet.crypto.WalletIdentity
 import com.yebente.wallet.data.local.DepositEntity
 import com.yebente.wallet.data.local.PromiseEntity
 import com.yebente.wallet.data.local.SenderHeadEntity
+import com.yebente.wallet.data.local.TrustedSenderEntity
 import com.yebente.wallet.data.local.WalletDatabase
 import com.yebente.wallet.data.remote.CreateInvoiceRequest
 import com.yebente.wallet.data.remote.YebenteApi
@@ -51,8 +52,9 @@ class WalletRepository(
     settings.config.map { it.anchorSats },
     db.promises().inboundAcceptedSum(),
     db.promises().outboundPendingSum(),
-  ) { anchor, inbound, outbound ->
-    WalletBalances(anchor, inbound, outbound)
+    db.promises().trustedInboundSum(),
+  ) { anchor, inbound, outbound, trusted ->
+    WalletBalances(anchor, inbound, outbound, trusted)
   }
 
   fun recentPromises(limit: Int = 100): Flow<List<PromiseEntity>> = db.promises().recent(limit)
@@ -164,6 +166,27 @@ class WalletRepository(
     } catch (_: SQLiteConstraintException) {
       ValidationResult.Invalid("DUPLICATE", "Promise was already accepted.")
     }
+  }
+
+  fun trustedSenders(): Flow<List<TrustedSenderEntity>> = db.trusted().all()
+
+  suspend fun isTrusted(sender: String): Boolean =
+    db.trusted().isTrusted(sender.trim().lowercase()) != null
+
+  suspend fun trustSender(sender: String, label: String): Result<Unit> {
+    val clean = sender.trim().lowercase()
+    if (!PromiseCodec.isHexKey(clean, 33)) {
+      return Result.failure(IllegalArgumentException("Not a valid wallet key."))
+    }
+    if (clean.equals(identityHex(), ignoreCase = true)) {
+      return Result.failure(IllegalArgumentException("Cannot trust your own key."))
+    }
+    db.trusted().upsert(TrustedSenderEntity(clean, label.trim().take(40), System.currentTimeMillis()))
+    return Result.success(Unit)
+  }
+
+  suspend fun untrustSender(sender: String) {
+    db.trusted().delete(sender.trim().lowercase())
   }
 
   suspend fun storeRecipientInvoice(promiseId: String, invoice: String) {
@@ -286,6 +309,7 @@ class WalletRepository(
     db.promises().clear()
     db.senderHeads().clear()
     db.deposits().clear()
+    db.trusted().clear()
     settings.wipeSecrets()
     seedStore.wipe()
   }

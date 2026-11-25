@@ -114,6 +114,10 @@ guarantee:
 Consequences for the design:
 
 - Caps default low. Raise them only for senders you trust.
+- Inbound stays pending until a receipt confirms settlement, unless the
+  sender is on the trusted list in Settings. Only anchor plus
+  trusted-sender inbound counts as spendable, so unconfirmed money can
+  never fund new offline sends.
 - Receivers who meet often should scan each other's receipts: confirmed
   receipts prove past settlement.
 - High value payments should wait for online settlement before the receiver

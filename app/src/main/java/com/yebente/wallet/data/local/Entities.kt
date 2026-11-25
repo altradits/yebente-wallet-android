@@ -28,6 +28,13 @@ data class SenderHeadEntity(
   val outstandingSats: Long,
 )
 
+@Entity(tableName = "trusted_senders")
+data class TrustedSenderEntity(
+  @PrimaryKey val sender: String,
+  val label: String,
+  val addedAt: Long,
+)
+
 @Entity(tableName = "deposits")
 data class DepositEntity(
   @PrimaryKey val paymentHash: String,
