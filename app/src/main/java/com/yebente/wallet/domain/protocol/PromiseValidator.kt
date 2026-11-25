@@ -62,6 +62,10 @@ object PromiseValidator {
     val structural = validateStructural(promise, policy, nowMs)
     if (structural is ValidationResult.Invalid) return structural
 
+    if (head?.blocked == true) {
+      return ValidationResult.Invalid("BLOCKED", "This sender is blocked for double-spending.")
+    }
+
     if (!WalletIdentity.verifyPromise(promise)) {
       return ValidationResult.Invalid("BAD_SIG", "Signature does not match the sender key.")
     }

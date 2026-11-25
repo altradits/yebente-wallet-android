@@ -110,6 +110,10 @@ guarantee:
   receivers who never compare notes. The hash chain makes the fork provable
   after the fact (two promises with the same seq), but prevention needs either
   online settlement or receivers who sync with each other.
+- Fork proofs: when this wallet sees two valid promises from one sender
+  sharing a seq with different hashes, it stores a fork proof, blocks the
+  sender from all future inbound, and drops them from the trusted list.
+  Blocked senders stay blocked until the wallet is wiped.
 
 Consequences for the design:
 

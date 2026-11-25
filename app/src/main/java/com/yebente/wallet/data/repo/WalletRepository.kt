@@ -5,6 +5,7 @@ import com.yebente.wallet.crypto.AndroidSeedStore
 import com.yebente.wallet.crypto.BitcoinAddresses
 import com.yebente.wallet.crypto.WalletIdentity
 import com.yebente.wallet.data.local.DepositEntity
+import com.yebente.wallet.data.local.ForkProofEntity
 import com.yebente.wallet.data.local.PromiseEntity
 import com.yebente.wallet.data.local.SenderHeadEntity
 import com.yebente.wallet.data.local.TrustedSenderEntity
@@ -20,6 +21,7 @@ import com.yebente.wallet.domain.model.ReceiveHandshake
 import com.yebente.wallet.domain.model.SenderHead
 import com.yebente.wallet.domain.model.SettlementReceipt
 import com.yebente.wallet.domain.model.WalletBalances
+import com.yebente.wallet.domain.protocol.ForkDetector
 import com.yebente.wallet.domain.protocol.PromiseCodec
 import com.yebente.wallet.domain.protocol.PromiseValidator
 import com.yebente.wallet.domain.protocol.ValidationResult
@@ -128,12 +130,18 @@ class WalletRepository(
     }
   }
 
+  fun forkProofs(): Flow<List<ForkProofEntity>> = db.forks().all()
+
+  fun blockedSenders(): Flow<List<String>> = db.senderHeads().blockedSenders()
+
   suspend fun acceptInbound(promise: OfflinePromise): ValidationResult {
     val now = System.currentTimeMillis()
     val headRow = db.senderHeads().bySender(promise.sender.lowercase())
     val head = headRow?.let {
-      SenderHead(it.sender, it.lastSeq, it.lastHash, it.outstandingSats)
+      SenderHead(it.sender, it.lastSeq, it.lastHash, it.outstandingSats, it.blocked)
     }
+    val fork = checkFork(promise, now)
+    if (fork != null) return fork
     val globalPending = db.promises().inboundAcceptedSumOnce()
     val verdict = PromiseValidator.validateInbound(promise, head, globalPending, policy, now)
     if (verdict is ValidationResult.Invalid) return verdict
@@ -187,6 +195,41 @@ class WalletRepository(
 
   suspend fun untrustSender(sender: String) {
     db.trusted().delete(sender.trim().lowercase())
+  }
+
+  private suspend fun checkFork(promise: OfflinePromise, now: Long): ValidationResult.Invalid? {
+    if (promise.seq <= 0 || promise.id.isBlank()) return null
+    val clash = db.promises().inboundBySenderSeq(promise.sender.lowercase(), promise.seq) ?: return null
+    if (clash.id == promise.id) return null
+    val existing = try {
+      PromiseCodec.json.decodeFromString(OfflinePromise.serializer(), clash.json)
+    } catch (_: Exception) {
+      return null
+    }
+    val fork = ForkDetector.detect(existing, promise) ?: return null
+    if (!WalletIdentity.verifyPromise(promise)) return null
+    db.forks().insert(
+      ForkProofEntity(
+        id = "${fork.sender}:${fork.seq}",
+        sender = fork.sender,
+        seq = fork.seq,
+        firstId = fork.firstId,
+        firstHash = fork.firstHash,
+        secondId = fork.secondId,
+        secondHash = fork.secondHash,
+        detectedAt = now,
+      ),
+    )
+    val headRow = db.senderHeads().bySender(fork.sender)
+    if (headRow != null) {
+      db.senderHeads().upsert(headRow.copy(blocked = true))
+    } else {
+      db.senderHeads().upsert(
+        SenderHeadEntity(fork.sender, existing.seq, fork.firstHash, 0L, blocked = true),
+      )
+    }
+    db.trusted().delete(fork.sender)
+    return ValidationResult.Invalid("FORK_DETECTED", "Sender double-spent seq ${fork.seq} and is now blocked.")
   }
 
   suspend fun storeRecipientInvoice(promiseId: String, invoice: String) {
@@ -310,6 +353,7 @@ class WalletRepository(
     db.senderHeads().clear()
     db.deposits().clear()
     db.trusted().clear()
+    db.forks().clear()
     settings.wipeSecrets()
     seedStore.wipe()
   }
