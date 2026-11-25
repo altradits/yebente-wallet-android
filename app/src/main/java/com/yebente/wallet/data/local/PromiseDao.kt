@@ -85,6 +85,18 @@ interface SenderHeadDao {
 }
 
 @Dao
+interface OutboundHeadDao {
+  @Query("SELECT * FROM outbound_heads WHERE recipient = :recipient LIMIT 1")
+  suspend fun byRecipient(recipient: String): OutboundHeadEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsert(head: OutboundHeadEntity)
+
+  @Query("DELETE FROM outbound_heads")
+  suspend fun clear()
+}
+
+@Dao
 interface ForkProofDao {
   @Query("SELECT * FROM fork_proofs ORDER BY detectedAt DESC")
   fun all(): Flow<List<ForkProofEntity>>

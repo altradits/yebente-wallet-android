@@ -6,6 +6,7 @@ import com.yebente.wallet.crypto.BitcoinAddresses
 import com.yebente.wallet.crypto.WalletIdentity
 import com.yebente.wallet.data.local.DepositEntity
 import com.yebente.wallet.data.local.ForkProofEntity
+import com.yebente.wallet.data.local.OutboundHeadEntity
 import com.yebente.wallet.data.local.PromiseEntity
 import com.yebente.wallet.data.local.SenderHeadEntity
 import com.yebente.wallet.data.local.TrustedSenderEntity
@@ -23,6 +24,7 @@ import com.yebente.wallet.domain.model.SenderHead
 import com.yebente.wallet.domain.model.SettlementReceipt
 import com.yebente.wallet.domain.model.WalletBalances
 import com.yebente.wallet.domain.protocol.ForkDetector
+import com.yebente.wallet.domain.protocol.OutboundChain
 import com.yebente.wallet.domain.protocol.PromiseCodec
 import com.yebente.wallet.domain.protocol.PromiseValidator
 import com.yebente.wallet.domain.protocol.TrustCaps
@@ -95,17 +97,19 @@ class WalletRepository(
     if (!balances.canSpend(sats)) {
       return Result.failure(IllegalArgumentException("Insufficient spendable balance."))
     }
-    val cfg = settings.current()
+    val recipientKey = handshake.recipient.lowercase()
+    val head = db.outboundHeads().byRecipient(recipientKey)
+    val (seq, prevHash) = OutboundChain.next(head?.lastSeq, head?.lastHash)
     val now = System.currentTimeMillis()
     val unsigned = OfflinePromise(
       id = randomId(),
       sender = identityHex(),
       recipient = handshake.recipient,
       sats = sats,
-      seq = cfg.outboundSeq + 1,
+      seq = seq,
       createdAt = now,
       expiresAt = now + policy.maxAgeMs,
-      prevHash = cfg.outboundHash,
+      prevHash = prevHash,
       settleAddress = handshake.address,
       memo = memo.trim().take(120),
     )
@@ -125,7 +129,9 @@ class WalletRepository(
           recipientLightning = handshake.lightning,
         ),
       )
-      settings.advanceOutboundChain(signed.seq, PromiseCodec.hashHexOf(signed))
+      db.outboundHeads().upsert(
+        OutboundHeadEntity(recipientKey, signed.seq, PromiseCodec.hashHexOf(signed)),
+      )
       Result.success(signed)
     } catch (t: Exception) {
       Result.failure(t)
@@ -447,6 +453,7 @@ class WalletRepository(
     db.deposits().clear()
     db.trusted().clear()
     db.forks().clear()
+    db.outboundHeads().clear()
     settings.wipeSecrets()
     seedStore.wipe()
   }
