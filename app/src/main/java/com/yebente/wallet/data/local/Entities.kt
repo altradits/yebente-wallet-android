@@ -46,6 +46,7 @@ data class TrustedSenderEntity(
   @PrimaryKey val sender: String,
   val label: String,
   val addedAt: Long,
+  val maxSats: Long = 200_000L,
 )
 
 @Entity(tableName = "deposits")

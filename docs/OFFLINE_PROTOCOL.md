@@ -94,7 +94,9 @@ The receiver accepts a promise only if every rule holds:
 7. The sender total and the wallet inbound total stay within caps.
 
 Default caps: 50,000 sats per promise, 200,000 per sender, 500,000 inbound
-total. Duplicates are rejected by promise id.
+total. Duplicates are rejected by promise id. Each trusted sender carries
+its own cap, editable in Settings, which replaces the per-sender default
+for inbound from that sender.
 
 ## Trust model (read this)
 

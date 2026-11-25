@@ -24,6 +24,7 @@ import com.yebente.wallet.domain.model.WalletBalances
 import com.yebente.wallet.domain.protocol.ForkDetector
 import com.yebente.wallet.domain.protocol.PromiseCodec
 import com.yebente.wallet.domain.protocol.PromiseValidator
+import com.yebente.wallet.domain.protocol.TrustCaps
 import com.yebente.wallet.domain.protocol.ValidationResult
 import com.yebente.wallet.sync.DepositJob
 import com.yebente.wallet.sync.DepositPoller
@@ -142,8 +143,12 @@ class WalletRepository(
     }
     val fork = checkFork(promise, now)
     if (fork != null) return fork
+    val trustedCap = db.trusted().bySender(promise.sender.lowercase())?.maxSats
+    val effectivePolicy = policy.copy(
+      maxPerSenderSats = TrustCaps.effectivePerSenderCap(policy.maxPerSenderSats, trustedCap),
+    )
     val globalPending = db.promises().inboundAcceptedSumOnce()
-    val verdict = PromiseValidator.validateInbound(promise, head, globalPending, policy, now)
+    val verdict = PromiseValidator.validateInbound(promise, head, globalPending, effectivePolicy, now)
     if (verdict is ValidationResult.Invalid) return verdict
     if (!promise.recipient.equals(identityHex(), ignoreCase = true)) {
       return ValidationResult.Invalid("NOT_FOR_ME", "Promise is addressed to another wallet.")
@@ -181,7 +186,7 @@ class WalletRepository(
   suspend fun isTrusted(sender: String): Boolean =
     db.trusted().isTrusted(sender.trim().lowercase()) != null
 
-  suspend fun trustSender(sender: String, label: String): Result<Unit> {
+  suspend fun trustSender(sender: String, label: String, maxSats: Long = policy.maxPerSenderSats): Result<Unit> {
     val clean = sender.trim().lowercase()
     if (!PromiseCodec.isHexKey(clean, 33)) {
       return Result.failure(IllegalArgumentException("Not a valid wallet key."))
@@ -189,7 +194,21 @@ class WalletRepository(
     if (clean.equals(identityHex(), ignoreCase = true)) {
       return Result.failure(IllegalArgumentException("Cannot trust your own key."))
     }
-    db.trusted().upsert(TrustedSenderEntity(clean, label.trim().take(40), System.currentTimeMillis()))
+    if (maxSats <= 0) {
+      return Result.failure(IllegalArgumentException("Cap must be positive."))
+    }
+    db.trusted().upsert(TrustedSenderEntity(clean, label.trim().take(40), System.currentTimeMillis(), maxSats))
+    return Result.success(Unit)
+  }
+
+  suspend fun setSenderCap(sender: String, maxSats: Long): Result<Unit> {
+    if (maxSats <= 0) {
+      return Result.failure(IllegalArgumentException("Cap must be positive."))
+    }
+    val clean = sender.trim().lowercase()
+    val row = db.trusted().bySender(clean)
+      ?: return Result.failure(IllegalArgumentException("Sender is not trusted."))
+    db.trusted().upsert(row.copy(maxSats = maxSats))
     return Result.success(Unit)
   }
 

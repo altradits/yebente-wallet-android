@@ -16,7 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -69,15 +71,34 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     }
   }
 
-  fun trust(sender: String, label: String) {
+  fun trust(sender: String, label: String, capText: String) {
+    val cap = capText.trim().toLongOrNull() ?: DEFAULT_TRUST_CAP
     viewModelScope.launch {
-      val result = withContext(Dispatchers.IO) { container.repository.trustSender(sender, label) }
+      val result = withContext(Dispatchers.IO) { container.repository.trustSender(sender, label, cap) }
       result.fold(
         onSuccess = {
           _status.value = "Sender trusted. Their inbound now counts as spendable."
           _error.value = ""
         },
         onFailure = { t -> _error.value = t.message ?: "Could not trust sender." },
+      )
+    }
+  }
+
+  fun setCap(sender: String, capText: String) {
+    val cap = capText.trim().toLongOrNull()
+    if (cap == null || cap <= 0) {
+      _error.value = "Cap must be a positive number."
+      return
+    }
+    viewModelScope.launch {
+      val result = withContext(Dispatchers.IO) { container.repository.setSenderCap(sender, cap) }
+      result.fold(
+        onSuccess = {
+          _status.value = "Cap updated."
+          _error.value = ""
+        },
+        onFailure = { t -> _error.value = t.message ?: "Could not update cap." },
       )
     }
   }
@@ -95,6 +116,10 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
       withContext(Dispatchers.IO) { container.repository.wipe() }
       onDone()
     }
+  }
+
+  companion object {
+    const val DEFAULT_TRUST_CAP = 200_000L
   }
 }
 
@@ -176,14 +201,18 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onWiped: () -> Uni
     val trusted by vm.trustedSenders.collectAsState()
     var trustKey by mutableStateOf("")
     var trustLabel by mutableStateOf("")
+    var trustCap by mutableStateOf("")
+    val capEdits = remember { mutableStateMapOf<String, String>() }
     SettingsField(value = trustKey, label = "Sender wallet key", onChange = { trustKey = it })
     SettingsField(value = trustLabel, label = "Label (optional)", onChange = { trustLabel = it })
+    SettingsField(value = trustCap, label = "Cap in sats (blank is 200000)", onChange = { trustCap = it.filter { c -> c.isDigit() }.take(12) })
     YebenteButton(
       label = "Trust Sender",
       onClick = {
-        vm.trust(trustKey, trustLabel)
+        vm.trust(trustKey, trustLabel, trustCap)
         trustKey = ""
         trustLabel = ""
+        trustCap = ""
       },
     )
     trusted.forEach { row ->
@@ -192,6 +221,24 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onWiped: () -> Uni
         fontFamily = Mono,
         fontSize = 11.sp,
         color = ObsidianPlum.TextSecondary,
+      )
+      Text(
+        text = "Cap " + row.maxSats + " sats",
+        fontFamily = Mono,
+        fontSize = 11.sp,
+        color = ObsidianPlum.TextMuted,
+      )
+      SettingsField(
+        value = capEdits[row.sender] ?: "",
+        label = "New cap in sats",
+        onChange = { capEdits[row.sender] = it.filter { c -> c.isDigit() }.take(12) },
+      )
+      NeutralButton(
+        label = "Set Cap",
+        onClick = {
+          vm.setCap(row.sender, capEdits[row.sender] ?: "")
+          capEdits.remove(row.sender)
+        },
       )
       NeutralButton(label = "Remove", onClick = { vm.untrust(row.sender) })
     }
