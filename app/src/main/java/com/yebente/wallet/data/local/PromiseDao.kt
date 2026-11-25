@@ -89,6 +89,9 @@ interface ForkProofDao {
   @Query("SELECT * FROM fork_proofs ORDER BY detectedAt DESC")
   fun all(): Flow<List<ForkProofEntity>>
 
+  @Query("SELECT * FROM fork_proofs ORDER BY detectedAt DESC")
+  suspend fun allOnce(): List<ForkProofEntity>
+
   @Insert(onConflict = OnConflictStrategy.IGNORE)
   suspend fun insert(proof: ForkProofEntity)
 

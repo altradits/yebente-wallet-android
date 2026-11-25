@@ -98,6 +98,17 @@ class ReceiveViewModel(private val container: AppContainer) : ViewModel() {
           }
           return@launch
         }
+        if (clean.startsWith(PromiseCodec.FORK_PREFIX + ":")) {
+          val frames = clean.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+          val gossip = withContext(Dispatchers.Default) { PromiseCodec.decodeForkGossip(frames) }
+          val ok = withContext(Dispatchers.IO) { container.repository.importForkGossip(gossip) }
+          _state.value = if (ok) {
+            _state.value.copy(status = "Double-spend proof verified. Sender is now blocked.", error = "")
+          } else {
+            _state.value.copy(error = "That proof did not verify.")
+          }
+          return@launch
+        }
         val frames = clean.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
         val promise = withContext(Dispatchers.Default) { PromiseCodec.decodePromise(frames) }
         val verdict = withContext(Dispatchers.IO) { container.repository.acceptInbound(promise) }
