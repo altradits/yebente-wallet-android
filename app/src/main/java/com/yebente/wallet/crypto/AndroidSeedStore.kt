@@ -18,6 +18,14 @@ class AndroidSeedStore(context: Context) {
 
   fun hasSeed(): Boolean = prefs.contains(KEY_MNEMONIC)
 
+  fun words(): List<String>? =
+    prefs.getString(KEY_MNEMONIC, null)?.split(" ")?.takeIf { it.isNotEmpty() }
+
+  fun setMnemonic(words: List<String>) {
+    BitcoinAddresses.seedFromMnemonic(words)
+    prefs.edit().putString(KEY_MNEMONIC, words.joinToString(" ")).apply()
+  }
+
   fun getOrCreateSeed(): DeterministicSeed {
     val existing = prefs.getString(KEY_MNEMONIC, null)
     if (!existing.isNullOrBlank()) {

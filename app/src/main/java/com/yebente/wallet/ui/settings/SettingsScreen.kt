@@ -1,5 +1,7 @@
 package com.yebente.wallet.ui.settings
 
+import android.app.Activity
+import android.view.WindowManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -21,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -111,6 +115,30 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     }
   }
 
+  var revealedWords by mutableStateOf<List<String>?>(null)
+    private set
+
+  fun revealSeed() {
+    viewModelScope.launch {
+      revealedWords = withContext(Dispatchers.IO) { container.repository.seedWords() }
+      if (revealedWords == null) _error.value = "No recovery phrase found."
+    }
+  }
+
+  fun hideSeed() {
+    revealedWords = null
+  }
+
+  fun restore(text: String, onDone: () -> Unit) {
+    viewModelScope.launch {
+      val result = withContext(Dispatchers.IO) { container.repository.restoreFromMnemonic(text) }
+      result.fold(
+        onSuccess = { onDone() },
+        onFailure = { t -> _error.value = t.message ?: "Could not restore." },
+      )
+    }
+  }
+
   fun wipe(onDone: () -> Unit) {
     viewModelScope.launch {
       withContext(Dispatchers.IO) { container.repository.wipe() }
@@ -124,7 +152,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 }
 
 @Composable
-fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onWiped: () -> Unit) {
+fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onIdentityReset: () -> Unit) {
   val config by vm.config.collectAsState()
   var backendUrl by mutableStateOf(config.backendUrl)
   var nodeUrl by mutableStateOf(config.nodeUrl)
@@ -250,6 +278,48 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onWiped: () -> Uni
       fontSize = 10.sp,
       color = ObsidianPlum.TextSecondary,
     )
+
+    Text(text = "Recovery phrase", fontFamily = Sans, fontSize = 13.sp, color = ObsidianPlum.TextMuted)
+    val revealed = vm.revealedWords
+    val activity = LocalContext.current as? Activity
+    DisposableEffect(revealed) {
+      if (revealed != null) {
+        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+      }
+      onDispose {
+        activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+      }
+    }
+    if (revealed == null) {
+      NeutralButton(label = "Show Recovery Phrase", onClick = vm::revealSeed)
+    } else {
+      Text(
+        text = "Write these words on paper. Anyone with them owns the wallet.",
+        fontFamily = Mono,
+        fontSize = 11.sp,
+        color = ObsidianPlum.TextSecondary,
+      )
+      Text(
+        text = revealed.mapIndexed { i, w -> "${i + 1}. $w" }.joinToString("  "),
+        fontFamily = Mono,
+        fontSize = 12.sp,
+        color = ObsidianPlum.TextPrimary,
+      )
+      NeutralButton(label = "Hide Phrase", onClick = vm::hideSeed)
+    }
+    var restoreText by mutableStateOf("")
+    var restoreArmed by mutableStateOf(false)
+    SettingsField(value = restoreText, label = "Restore phrase (clears this wallet)", onChange = { restoreText = it })
+    YebenteButton(
+      label = if (restoreArmed) "Tap Again to Restore" else "Restore Wallet",
+      onClick = {
+        if (restoreArmed) vm.restore(restoreText, onIdentityReset) else restoreArmed = true
+      },
+      danger = true,
+    )
+    if (restoreArmed) {
+      NeutralButton(label = "Cancel", onClick = { restoreArmed = false })
+    }
     Text(
       text = "Offline caps: 50,000 sats per payment, 200,000 per sender, 500,000 inbound total.",
       fontFamily = Mono,
@@ -261,7 +331,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onWiped: () -> Uni
     YebenteButton(
       label = if (wipeArmed) "Tap Again to Wipe" else "Wipe Wallet",
       onClick = {
-        if (wipeArmed) vm.wipe(onWiped) else wipeArmed = true
+        if (wipeArmed) vm.wipe(onIdentityReset) else wipeArmed = true
       },
       danger = true,
     )

@@ -159,7 +159,7 @@ private fun YeBenteNav(factory: VmFactory) {
       SettingsScreen(
         vm = vm,
         onBack = { nav.popBackStack() },
-        onWiped = { nav.popBackStack("home", inclusive = false) },
+        onIdentityReset = { nav.popBackStack("home", inclusive = false) },
       )
     }
     composable("deposit") {

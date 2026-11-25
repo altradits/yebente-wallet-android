@@ -41,6 +41,8 @@ gradle wrapper --gradle-version 8.7
   over Lightning through the user's own node via the Yebente gateway.
 - Proof: Lightning preimages and payment hashes sync back as receipts when
   phones next meet, so receivers can confirm real settlement.
+- Backup: Settings reveals the 12-word recovery phrase (screenshot-blocked)
+  and restores from a phrase, keeping node settings while resetting chains.
 
 Read [docs/OFFLINE_PROTOCOL.md](docs/OFFLINE_PROTOCOL.md) for the wire format
 and trust model, and [docs/REBALANCE.md](docs/REBALANCE.md) for settlement.
