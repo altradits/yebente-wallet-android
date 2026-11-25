@@ -93,7 +93,8 @@ fun HomeScreen(
     AmountText(sats = balances.spendableSats, large = true)
     Spacer(modifier = Modifier.height(8.dp))
     ReadoutRow(label = "Settled anchor", value = "${balances.anchorSats} Sats")
-    ReadoutRow(label = "Inbound pending", value = "${balances.inboundAcceptedSats} Sats")
+    ReadoutRow(label = "Trusted inbound", value = "${balances.trustedInboundSats} Sats")
+    ReadoutRow(label = "Pending inbound", value = "${balances.pendingInboundSats} Sats")
     ReadoutRow(label = "Outbound queued", value = "${balances.outboundPendingSats} Sats")
     if (pendingCount > 0) {
       ReadoutRow(label = "Payments to settle", value = pendingCount.toString())
